@@ -73,7 +73,7 @@ class CaptioningSolver(object):
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
 
-    def train(self):
+    def train(self, ckptnum):
         # train/val dataset
         
         n_examples = self.data.totalnum
@@ -82,7 +82,7 @@ class CaptioningSolver(object):
         
         # build graphs for training model and sampling captions
         self.model.build_variables()
-        self.model.load("model/lstmwithoutcnn", 110)
+        self.model.load("model/lstmwithoutcnn", ckptnum)
         loss, exe, input_names = self.model.build_model()
         _, _, generated_captions, gen_exe = self.model.build_sampler(max_len=20)
         #return
@@ -177,5 +177,5 @@ class CaptioningSolver(object):
             '''
             # save model's parameters
             if (e + 1) % self.save_every == 0:
-                self.model.save("model/lstmwithoutcnn", 110)
+                self.model.save("model/lstmwithoutcnn", ckptnum)
                 print "model-%s saved." % (e + 1)
