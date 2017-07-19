@@ -358,14 +358,14 @@ class CaptionGenerator(object):
             else:
                 print name,"off"
             self.arguments[name] = arg_params[name].copyto(self.ctx)
-        '''
+        
         for name in self.arguments.keys():
             if name in arg_params.keys():
-                print name,"have"
+                continue
+                #print name,"have"
             else:
                 print name,"not have"
-        print "Loading aux_params"
-        '''
+
         for name in aux_params.keys():
             if name in self.auxs.keys():
                 print name,"on"

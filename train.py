@@ -24,15 +24,17 @@ def main():
     with open(os.path.join("data", 'word_to_idx.pkl'), 'rb') as f:
             word_to_idx = pickle.load(f)
 
-    data = DataSet(data_path="./image/", json_path="./data/train.json", batchsize=batch_size, word_to_idx=word_to_idx, max_total=max_len+2)
-    val_data = DataSet(data_path="./image/", json_path="./data/val.json", batchsize=batch_size, word_to_idx=word_to_idx, max_total=max_len+2)
+    data = DataSet(data_path="./image/", json_path="./data/singlecap_train.json", batchsize=batch_size, word_to_idx=word_to_idx, max_total=max_len+2)
+    val_data = DataSet(data_path="./image/", json_path="./data/singlecap_val.json", batchsize=batch_size, word_to_idx=word_to_idx, max_total=max_len+2)
 
     model = CaptionGenerator(word_to_idx, dim_feature=[196, 512], dim_embed=256, batch_size=batch_size,
                                        dim_hidden=256, n_time_step=max_len+1, prev2out=True,
                                                  ctx2out=True, alpha_c=1.0, selector=True, dropout=True, ctx=mx.gpu(0))
 
-    solver = CaptioningSolver(model, data, val_data, n_epochs=50000, batch_size=batch_size, update_rule='adam',
-                                          learning_rate=0.001, print_every=10, save_every=1, image_path='./image/',
+    data_mp = MpDataSet(10, data)
+    val_data_mp = MpDataSet(5, val_data)
+    solver = CaptioningSolver(model, data_mp, val_data_mp, n_epochs=50000, batch_size=batch_size, update_rule='adam',
+                                          learning_rate=0.0005, print_every=1, save_every=1, image_path='./image/',
                                     pretrained_model=None, model_path='./model/', test_model='model/lstm-19',
                                      print_bleu=True, log_path='./log/')
 

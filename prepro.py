@@ -6,7 +6,7 @@ import pandas as pd
 import hickle
 import os
 import json
-
+from random import shuffle
 
 def _process_caption_data(caption_file, image_dir, max_length):
     with open(caption_file) as f:
@@ -17,13 +17,20 @@ def _process_caption_data(caption_file, image_dir, max_length):
 
     # data is a list of dictionary which contains 'captions', 'file_name' and 'image_id' as key.
     data = []
+    image2caps = {}
     for annotation in caption_data['annotations']:
         image_id = annotation['image_id']
         if image_id in id_to_filename:
             pp = os.path.join(image_dir, id_to_filename[image_id])
             cap = _pro_caption(annotation["caption"])
             if len(cap.split(" ")) <= max_length+2:
-                data.append({"image_path":pp, "caption":cap})
+                #data.append({"image_path":pp, "caption":cap})
+                if pp in image2caps:
+                    image2caps[pp].append(cap)
+                else:
+                    image2caps[pp] = [cap]
+    for k,v in image2caps.items():
+        data.append({"image_path":k, "caption":v})
     return data
 def _pro_caption(caption):
     caption = caption.replace('.', '').replace(',', '').replace("'", "").replace('"', '')
@@ -57,7 +64,14 @@ def _build_vocab(annotations, threshold=1):
         idx += 1
     print "Max length of caption: ", max_len
     return word_to_idx
-
+def _expand(raw):
+    data = []
+    for v in raw:
+        pp = v["image_path"]
+        for cap in v["caption"]:
+            data.append({"image_path":pp, "caption":cap})
+    print len(data)
+    return data
 def save_json(data, path):
     with open(path, 'wb') as f:
         json.dump(data, f)
@@ -93,9 +107,12 @@ def main():
     dataset['val'] = val_dataset[len(val_dataset)-test_cutoff-val_cutoff:len(val_dataset)-test_cutoff]
 
     for split in ['train', 'val', 'test']:
-        save_json(dataset[split], "data/%s.json"%split)
+        save_json(dataset[split], "data/multicaps_%s.json"%split)
+        save_json(_expand(dataset[split]), "data/singlecap_%s.json"%split)
+        '''
         if split == 'train':
             word_to_idx = _build_vocab(annotations=dataset[split], threshold=word_count_threshold)
             save_pickle(word_to_idx, 'data/word_to_idx.pkl')
+        '''
 if __name__ == "__main__":
     main()

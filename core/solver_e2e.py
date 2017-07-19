@@ -5,13 +5,18 @@ import mxnet as mx
 import skimage.transform
 import numpy as np
 import time
-import os
+import os,json
 import cPickle as pickle
 from scipy import ndimage
 from utils import *
 from bleu import evaluate
 from vggnet import *
 
+def _promulticaps(caps):
+    data = {}
+    for v in caps:
+        data[v["image_path"]] = v["caption"]
+    return data
 class CaptioningSolver(object):
     def __init__(self, model, data, val_data, **kwargs):
         """
@@ -51,6 +56,8 @@ class CaptioningSolver(object):
         self.pretrained_model = kwargs.pop('pretrained_model', None)
         self.test_model = kwargs.pop('test_model', './model/lstm/model-1')
 
+        self.train_caption_gts = _promulticaps(json.load(open('data/multicaps_train.json')))
+        self.val_caption_gts = _promulticaps(json.load(open('data/multicaps_val.json')))
         # set an optimizer by update rule
         if self.update_rule == 'sgd':
             self.optimizer = mx.optimizer.SGD
@@ -75,7 +82,7 @@ class CaptioningSolver(object):
         
         # build graphs for training model and sampling captions
         self.model.build_variables()
-        #self.model.load("model/lstm", 100)
+        self.model.load("model/lstmwithoutcnn", 110)
         loss, exe, input_names = self.model.build_model()
         _, _, generated_captions, gen_exe = self.model.build_sampler(max_len=20)
         #return
@@ -109,31 +116,30 @@ class CaptioningSolver(object):
         for e in range(self.n_epochs):
             self.data.reset()
             for i in range(n_iters_per_epoch):
-                captions_batch, images_batch = self.data.next_batch_for_all()
+                captions_batch, images_batch, image_paths = self.data.next_batch_for_all()
                 #features_batch = self.vgg19.getfeatures(images_batch)
                 #mx.nd.array(features_batch).copyto(self.model.features_arr)
                 mx.nd.array(images_batch).copyto(self.model.image_arr)
                 mx.nd.array(captions_batch).copyto(self.model.captions_arr)
                 l = exe.forward(is_train=True)
-                exe.backward()
                 lloss = l[0].asnumpy().mean()
                 if lloss == np.nan or lloss == -np.inf or lloss == np.inf:
                     print lloss
                     continue
                 curr_loss += lloss
-
+                exe.backward()
                 for j,argn in enumerate(loss.list_arguments()):
                     if argn in input_names:
                         continue
-                    if argn in self.model.cnn_params:
-                        continue
+                    #if argn in self.model.cnn_params:
+                    #    continue
                     #print args[i], grads[i], states[i]
                     self.opt.update(j, args[j], grads[j], states[j])
                     #print "updated weights:",argn
                 if (i + 1) % self.print_every == 0:
                     print "\nTrain loss at epoch %d & iteration %d (mini-batch): %.5f" % (e + 1, i + 1, l[0].asnumpy().mean())
-                    ground_truths = captions_batch[0]
-                    decoded = decode_captions(ground_truths, self.model.idx_to_word)
+                    ground_truths = self.train_caption_gts[image_paths[0]]
+                    decoded = ground_truths #decode_captions(ground_truths, self.model.idx_to_word)
                     for j, gt in enumerate(decoded):
                         print "Ground truth %d: %s" % (j + 1, gt)
                     #mx.nd.array(features_batch).copyto(self.model.features_arr)
@@ -171,5 +177,5 @@ class CaptioningSolver(object):
             '''
             # save model's parameters
             if (e + 1) % self.save_every == 0:
-                self.model.save("model/lstmwithoutcnn", 120)
+                self.model.save("model/lstmwithoutcnn", 110)
                 print "model-%s saved." % (e + 1)
