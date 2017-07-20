@@ -43,11 +43,11 @@ class DataSet(object):
 		return (np.asarray(image).transpose((2,0,1))-120)/255.0
 	def sentence2array(self, sentence):
 		a = [self.word_to_idx['<NULL>']] * self.max_len
-		for i,s in enumerate(sentence.split(" ")):
+		i = 0
+		for s in sentence.split(" "):
 			if s in self.word_to_idx.keys():
 				a[i] = self.word_to_idx[s]
-			else:
-				a[i] = self.word_to_idx['<NULL>']
+				i += 1
 		return a
 	def next_batch_for_all(self):
 		#idxs = [ k+self.itptr for k in range(self.batchsize)] 
@@ -60,12 +60,13 @@ class DataSet(object):
 
 def inputQ(queue, dataset, start, end):
 	batchsize = dataset.batchsize
-	for itptr in xrange(start,end):
-		imgpaths = dataset.imgpaths[itptr*batchsize:(itptr+1)*batchsize]
-		captions = dataset.captions[itptr*batchsize:(itptr+1)*batchsize]
-		img_array = [dataset.getimg(dataset.pathbase+p) for p in imgpaths]
-		caption_array = [dataset.sentence2array(c) for c in captions]
-		queue.put([np.asarray(caption_array),np.asarray(img_array),imgpaths])
+	while(True):
+		for itptr in xrange(start,end):
+			imgpaths = dataset.imgpaths[itptr*batchsize:(itptr+1)*batchsize]
+			captions = dataset.captions[itptr*batchsize:(itptr+1)*batchsize]
+			img_array = [dataset.getimg(dataset.pathbase+p) for p in imgpaths]
+			caption_array = [dataset.sentence2array(c) for c in captions]
+			queue.put([np.asarray(caption_array),np.asarray(img_array),imgpaths])
 class MpDataSet(object):
 	"""docstring for MpDataSet"""
 	def __init__(self, pnum, dataset):
@@ -79,15 +80,20 @@ class MpDataSet(object):
 			sb = buckets*i
 			eb = buckets*(i+1)
 			self.processes.append(mp.Process(target=inputQ, args=(self.queue,  dataset, sb, eb)))
+		for p in self.processes:
+			p.start()
 	def reset(self):
+		a=1
+		'''
 		for p in self.processes:
 			p.terminate()
-		for p in self.processes:
-			p.join()
+		#for p in self.processes:
+		#	p.join()
 		while not self.queue.empty():
 			self.queue.get()
 		for p in self.processes:
 			p.start()
+		'''
 	def next_batch_for_all(self):
 		#idxs = [ k+self.itptr for k in range(self.batchsize)] 
 		return self.queue.get()
