@@ -80,6 +80,10 @@ class MpDataSet(object):
 			eb = buckets*(i+1)
 			self.processes.append(mp.Process(target=inputQ, args=(self.queue,  dataset, sb, eb)))
 	def reset(self):
+		for p in self.processes:
+			p.terminate()
+		for p in self.processes:
+			p.join()
 		while not self.queue.empty():
 			self.queue.get()
 		for p in self.processes:
