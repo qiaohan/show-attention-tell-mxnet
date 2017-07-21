@@ -313,7 +313,7 @@ class CaptionGenerator(object):
             logits = self._decode_lstm(self.x[t], h, context, self.decode_w_h, self.decode_b_h, self.decode_w_out, self.decode_b_out, self.decode_w_ctx2out, dropout=self.dropout)
             logp = -mx.sym.log(mx.sym.softmax(logits))
             loss += mx.sym.sum( logp * mx.sym.one_hot(self.captions_out[t], depth=self.V) * mx.sym.broadcast_to(mx.sym.expand_dims(self.mask[t], axis=1), shape=(self.batch_size, self.V)))
-
+            loss /= mx.sym.sum( self.mask[t] )
         if self.alpha_c > 0:
             #alphas = mx.sym.pack(alpha_list)  # (T, N, L)
             alphas_all = reduce(lambda x,y:x+y, alpha_list)  # (N, L)

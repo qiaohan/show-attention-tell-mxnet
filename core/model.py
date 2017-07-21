@@ -283,7 +283,7 @@ class CaptionGenerator(object):
             logits = mx.sym.broadcast_plus(mx.sym.dot(h, self.decode_w), self.decode_b)
             logp = -mx.sym.log(mx.sym.softmax(logits))
             loss += mx.sym.sum( logp * mx.sym.one_hot(self.captions_out[t], depth=self.V) * mx.sym.broadcast_to(mx.sym.expand_dims(self.mask[t], axis=1), shape=(self.batch_size, self.V)))
-
+            loss /= mx.sym.sum( self.mask[t] )
         loss = loss / batch_size
         loss = mx.sym.MakeLoss(loss)
         self.loss = loss
@@ -381,5 +381,5 @@ class CaptionGenerator(object):
         #sampled_captions.save("gen.json")
         self.captiongenerator = sampled_captions
         exe = self.getexe(sampled_captions, bp=False)
-        return _, _, sampled_captions, exe
+        return 1, 1, sampled_captions, exe
         #return alpha_list, beta_list, sampled_captions, exe
