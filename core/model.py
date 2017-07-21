@@ -62,7 +62,7 @@ class CaptionGenerator(object):
 
         self.input_names=["features","captions"]
         self.input_shapes = {"features":(self.batch_size, self.L, self.D), "captions":(self.batch_size, self.T+1)}
-        self.input_types = {"features":"float32", "captions":"int32"}
+        self.input_types = {"features":"float32", "captions":"float32"}
         self.auxs={}
         self.arguments = {}
         self.initializers = {}
@@ -83,16 +83,8 @@ class CaptionGenerator(object):
         self.initializers = {}
         self.cnn_params = [n for n in self.arguments if n not in self.input_names]
     def _get_initial_lstm(self, features):
-        #features_mean = mx.sym.mean(features, axis=1)
-        #w_h = mx.sym.Variable(name='w_inith', shape=[self.batch_size, self.D], init=self.weight_initializer)
-        #w_h = mx.sym.Variable(name='w_inith', shape=[self.D, self.H], init=self.weight_initializer)
-        #b_h = mx.sym.Variable(name='b_inith', shape=[self.H], init=self.const_initializer)
         inp = mx.sym.tanh( mx.sym.broadcast_plus(mx.sym.dot(features, self.w_feat2input), self.b_feat2input) )
 
-        #w_c = mx.sym.Variable(name='w_initc', shape=[self.D, self.H], init=self.weight_initializer)
-        #b_c = mx.sym.Variable(name='b_initc', shape=[self.H], init=self.const_initializer)
-        
-        #c = mx.sym.tanh( mx.sym.broadcast_plus(mx.sym.dot(features_mean, self.w_feat2c), self.b_feat2c) )
         h = mx.sym.zeros([self.batch_size, self.H])
         c = mx.sym.zeros([self.batch_size, self.H])
         _, (h, c) = self.lstm_cell(inputs=inp, states=[h, c])
@@ -104,42 +96,8 @@ class CaptionGenerator(object):
             x.append(mx.sym.Embedding(data=inp, weight=w, input_dim=self.V, output_dim=self.M, name='word_vector'))  # (N, T, M) or (N, M)
         return x
 
-
-    def _attention_layer(self, features, features_proj, h, w, b, w_att):
-
-        h_att =  mx.sym.Activation(data=mx.sym.broadcast_plus(features_proj, b) + mx.sym.broadcast_to(mx.sym.expand_dims(mx.sym.dot(h,w), axis=1), shape=(self.batch_size, self.L, self.D)), act_type='relu')  # (N, L, D)
-        #out_att = tf.reshape(tf.matmul(tf.reshape(h_att, [-1, self.D]), w_att), [-1, self.L])  # (N, L)
-        tt = mx.sym.dot(h_att, w_att)
-        out_att = mx.sym.reshape(data=tt, shape=[-1, self.L])
-        alpha = mx.sym.softmax(out_att) # (N, L)
-        context = mx.sym.sum(features*mx.sym.broadcast_to(mx.sym.expand_dims(alpha, axis=2), shape=(self.batch_size, self.L, self.D)), axis=1, name='context')  # (N, D)
-        return context, alpha
-
-    def _selector(self, context, h, w, b):         
-        beta = mx.sym.sigmoid(data=mx.sym.broadcast_plus(mx.sym.dot(h, w), b), name='beta')  # (N, 1)
-        context = mx.sym.broadcast_to(beta, shape=(self.batch_size, self.D)) * context
-        return context, beta
-
-    def _decode_lstm(self, x, h, context, w_h, b_h, w_out, b_out, w_ctx2out, dropout=False,):
-        if dropout:
-            h = mx.sym.Dropout(h, p=0.5)
-        h_logits = mx.sym.broadcast_plus(mx.sym.dot(h, w_h), b_h)
-
-        if self.ctx2out:
-            #w_ctx2out = tf.get_variable('w_ctx2out', [self.D, self.M], initializer=self.weight_initializer)
-            h_logits += mx.sym.dot(context, w_ctx2out)
-
-        if self.prev2out:
-            h_logits += x
-        #h_logits = mx.sym.tanh(h_logits)
-
-        #if dropout:
-        #    h_logits = mx.sym.Dropout(h_logits, p=0.5)
-        out_logits = mx.sym.broadcast_plus(mx.sym.dot(h_logits, w_out), b_out)
-        return out_logits
-
-    def _batch_norm(self, x, mode='train', name=None):
-        return mx.sym.BatchNorm(data=x, fix_gamma=False, momentum=0.9, eps=2e-5, name=name)
+    #def _batch_norm(self, x, mode='train', name=None):
+    #    return mx.sym.BatchNorm(data=x, fix_gamma=False, momentum=0.9, eps=2e-5, name=name)
     
     def build_variables(self):
         
@@ -155,23 +113,6 @@ class CaptionGenerator(object):
         self.arguments['b_initinput_bias'] = mx.nd.zeros([self.M], dtype='float32')
         self.initializers['b_initinput_bias'] = self.const_initializer
 
-        '''
-        self.decode_w_h = mx.sym.Variable(name = 'w_h_decode_weight', shape=[self.H, self.M], init=self.weight_initializer)
-        self.arguments['w_h_decode_weight'] = mx.nd.zeros([self.H, self.M], dtype='float32')
-        self.initializers['w_h_decode_weight'] = self.weight_initializer
-        
-        self.decode_b_h = mx.sym.Variable(name = 'b_h_decode_bias', shape=[self.M], init=self.const_initializer)
-        self.arguments['b_h_decode_bias'] = mx.nd.zeros([self.M], dtype='float32')
-        self.initializers['b_h_decode_bias'] = self.const_initializer
-
-        self.decode_w_out = mx.sym.Variable(name = 'w_out_decode_weight', shape=[self.M, self.V], init=self.weight_initializer)
-        self.arguments['w_out_decode_weight'] = mx.nd.zeros([self.M, self.V], dtype='float32')
-        self.initializers['w_out_decode_weight'] = self.weight_initializer
-
-        self.decode_b_out = mx.sym.Variable(name = 'b_out_decode_bias', shape=[self.V], init=self.const_initializer)
-        self.arguments['b_out_decode_bias'] = mx.nd.zeros([self.V], dtype='float32')
-        self.initializers['b_out_decode_bias'] = self.const_initializer
-        '''
         self.decode_w = mx.sym.Variable(name = 'w_decode_weight', shape=[self.H, self.V], init=self.weight_initializer)
         self.arguments['w_decode_weight'] = mx.nd.zeros([self.H, self.V], dtype='float32')
         self.initializers['w_decode_weight'] = self.weight_initializer
@@ -179,8 +120,6 @@ class CaptionGenerator(object):
         self.decode_b = mx.sym.Variable(name = 'b_decode_bias', shape=[self.V], init=self.const_initializer)
         self.arguments['b_decode_bias'] = mx.nd.zeros([self.V], dtype='float32')
         self.initializers['b_decode_bias'] = self.const_initializer
-
-        self.decode_w_ctx2out = None
         
         #self.lstmparam = mx.rnn.RNNParams(prefix='lstm_')
         self.lstm_cell = mx.rnn.LSTMCell(num_hidden=self.H)# params=self.lstmparam)
@@ -268,6 +207,7 @@ class CaptionGenerator(object):
 
     def build_model(self):        
         loss = 0.0
+        cnt = 0.0
         #alpha_list = []
         c,h = self.init_state
         batch_size = self.batch_size
@@ -282,9 +222,11 @@ class CaptionGenerator(object):
             #logits = self._decode_lstm(self.x[t], h, context, self.decode_w_h, self.decode_b_h, self.decode_w_out, self.decode_b_out, self.decode_w_ctx2out, dropout=self.dropout)
             logits = mx.sym.broadcast_plus(mx.sym.dot(h, self.decode_w), self.decode_b)
             logp = -mx.sym.log(mx.sym.softmax(logits))
-            loss += mx.sym.sum( logp * mx.sym.one_hot(self.captions_out[t], depth=self.V) * mx.sym.broadcast_to(mx.sym.expand_dims(self.mask[t], axis=1), shape=(self.batch_size, self.V)))
-            loss /= mx.sym.sum( self.mask[t] )
-        loss = loss / batch_size
+            ce = mx.sym.sum( logp * mx.sym.one_hot(self.captions_out[t], depth=self.V) * mx.sym.broadcast_to(mx.sym.expand_dims(self.mask[t], axis=1), shape=(self.batch_size, self.V)))
+            loss += ce
+            cnt += mx.sym.sum( self.mask[t] )
+            #loss += 0*ce + mx.sym.sum( self.mask[t] )
+        loss /= batch_size*cnt
         loss = mx.sym.MakeLoss(loss)
         self.loss = loss
         self.trainexe = self.getexe(loss)

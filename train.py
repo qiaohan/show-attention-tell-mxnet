@@ -29,11 +29,11 @@ def main():
 
     model = CaptionGenerator(word_to_idx, dim_feature=[196, 512], dim_embed=256, batch_size=batch_size,
                                        dim_hidden=256, n_time_step=max_len+1, prev2out=True,
-                                                 ctx2out=True, alpha_c=1.0, selector=True, dropout=True, ctx=mx.gpu(0))
+                                                 ctx2out=True, alpha_c=1.0, selector=False, dropout=True, ctx=mx.gpu(0))
 
-    #data_mp = MpDataSet(10, data)
+    data_mp = MpDataSet(10, data)
     #val_data_mp = MpDataSet(5, val_data)
-    solver = CaptioningSolver(model, data, val_data, n_epochs=50000, batch_size=batch_size, update_rule='adam',
+    solver = CaptioningSolver(model, data_mp, val_data, n_epochs=50000, batch_size=batch_size, update_rule='adam',
                                           learning_rate=0.0005, print_every=50, save_every=1, image_path='./image/',
                                     pretrained_model=None, model_path='./model/', test_model='model/lstm-19',
                                      print_bleu=True, log_path='./log/')

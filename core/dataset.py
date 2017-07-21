@@ -56,7 +56,7 @@ class DataSet(object):
 		img_array = [self.getimg(self.pathbase+p) for p in imgpaths]
 		caption_array = [self.sentence2array(c) for c in captions]
 		self.itptr += self.batchsize
-		return np.asarray(caption_array),np.asarray(img_array),imgpaths
+		return np.asarray(caption_array).astype(np.float32),np.asarray(img_array).astype(np.float32),imgpaths
 
 def inputQ(queue, dataset, start, end):
 	batchsize = dataset.batchsize
@@ -66,7 +66,7 @@ def inputQ(queue, dataset, start, end):
 			captions = dataset.captions[itptr*batchsize:(itptr+1)*batchsize]
 			img_array = [dataset.getimg(dataset.pathbase+p) for p in imgpaths]
 			caption_array = [dataset.sentence2array(c) for c in captions]
-			queue.put([np.asarray(caption_array),np.asarray(img_array),imgpaths])
+			queue.put([np.asarray(caption_array).astype(np.float32),np.asarray(img_array).astype(np.float32),imgpaths])
 class MpDataSet(object):
 	"""docstring for MpDataSet"""
 	def __init__(self, pnum, dataset):

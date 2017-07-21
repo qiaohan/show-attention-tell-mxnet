@@ -34,11 +34,11 @@ def main():
     #data_mp = MpDataSet(10, data)
     #val_data_mp = MpDataSet(5, val_data)
     solver = CaptioningSolver(model, data, val_data, n_epochs=50000, batch_size=batch_size, update_rule='adam',
-                                          learning_rate=0.001, print_every=50, save_every=1, image_path='./image/',
+                                          learning_rate=0.01, print_every=50, save_every=1, image_path='./image/',
                                     pretrained_model=None, model_path='./model/', test_model='model/lstm-19',
                                      print_bleu=True, log_path='./log/')
 
-    solver.train(017)
+    solver.train(027)
 
 if __name__ == "__main__":
     main()

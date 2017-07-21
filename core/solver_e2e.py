@@ -127,6 +127,12 @@ class CaptioningSolver(object):
                     print lloss
                     continue
                 curr_loss += lloss
+                '''
+                print "loss:",lloss
+                print np.sum(np.not_equal(captions_batch[1:,:], self.model._null))/self.batch_size
+                print "null:",self.model._null
+                continue
+                '''
                 exe.backward()
                 for j,argn in enumerate(loss.list_arguments()):
                     if argn in input_names:
@@ -137,7 +143,7 @@ class CaptioningSolver(object):
                     self.opt.update(j, args[j], grads[j], states[j])
                     #print "updated weights:",argn
                 if (i + 1) % self.print_every == 0:
-                    print "\nTrain loss at epoch %d & iteration %d (mini-batch): %.5f" % (e + 1, i + 1, l[0].asnumpy().mean())
+                    print "\nTrain loss at epoch %d & iteration %d (mini-batch): %.5f" % (e + 1, i + 1, lloss)
                     
                     ground_truths = self.train_caption_gts[image_paths[0]]
                     decoded = ground_truths #decode_captions(ground_truths, self.model.idx_to_word)

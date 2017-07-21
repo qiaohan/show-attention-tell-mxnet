@@ -108,11 +108,10 @@ def main():
 
     for split in ['train', 'val', 'test']:
         save_json(dataset[split], "data/multicaps_%s.json"%split)
-        save_json(_expand(dataset[split]), "data/singlecap_%s.json"%split)
-        '''
+	dd =_expand(dataset[split])
+        save_json(dd, "data/singlecap_%s.json"%split)
         if split == 'train':
-            word_to_idx = _build_vocab(annotations=dataset[split], threshold=word_count_threshold)
+            word_to_idx = _build_vocab(annotations=dd, threshold=word_count_threshold)
             save_pickle(word_to_idx, 'data/word_to_idx.pkl')
-        '''
 if __name__ == "__main__":
     main()
