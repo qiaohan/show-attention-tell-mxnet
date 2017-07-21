@@ -82,7 +82,7 @@ class CaptioningSolver(object):
         
         # build graphs for training model and sampling captions
         self.model.build_variables()
-        self.model.load("model/lstmwithoutcnn", ckptnum)
+        #self.model.load("model/lstmwithoutcnn", ckptnum)
         loss, exe, input_names = self.model.build_model()
         _, _, generated_captions, gen_exe = self.model.build_sampler(max_len=20)
         #return
@@ -131,13 +131,14 @@ class CaptioningSolver(object):
                 for j,argn in enumerate(loss.list_arguments()):
                     if argn in input_names:
                         continue
-                    #if argn in self.model.cnn_params:
-                    #    continue
+                    if argn in self.model.cnn_params:
+                        continue
                     #print args[i], grads[i], states[i]
                     self.opt.update(j, args[j], grads[j], states[j])
                     #print "updated weights:",argn
                 if (i + 1) % self.print_every == 0:
                     print "\nTrain loss at epoch %d & iteration %d (mini-batch): %.5f" % (e + 1, i + 1, l[0].asnumpy().mean())
+                    
                     ground_truths = self.train_caption_gts[image_paths[0]]
                     decoded = ground_truths #decode_captions(ground_truths, self.model.idx_to_word)
                     for j, gt in enumerate(decoded):
@@ -149,10 +150,10 @@ class CaptioningSolver(object):
                     gen_caps = gen_caps[0].asnumpy()
                     decoded = decode_captions(gen_caps, self.model.idx_to_word)
                     print "Generated caption: %s\n" % decoded[0]
-
-            print "Previous epoch loss: ", prev_loss
-            print "Current epoch loss: ", curr_loss
-            print "Elapsed time: ", time.time() - start_t
+                    
+            print "Previous epoch loss: ", prev_loss/(n_iters_per_epoch*self.batch_size)
+            print "Current epoch loss: ", curr_loss/(n_iters_per_epoch*self.batch_size)
+            print "Elapsed time(h): ", (time.time() - start_t)/360
             prev_loss = curr_loss
             curr_loss = 0
             '''

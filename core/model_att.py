@@ -13,7 +13,7 @@
 from __future__ import division
 
 import mxnet as mx
-from vggnet import *
+
 
 class CaptionGenerator(object):
     def __init__(self, word_to_idx, dim_feature=[196, 512], dim_embed=512, batch_size=50, dim_hidden=1024, n_time_step=16,
@@ -52,50 +52,29 @@ class CaptionGenerator(object):
         self.weight_initializer = mx.initializer.Xavier()
         self.const_initializer = self.weight_initializer #mx.initializer.Constant(0.0)
         self.emb_initializer = self.weight_initializer #mx.initializer.Uniform(1.0)
-        self.build_input_e2e()
-    def build_input(self):
+
         # Place holder for features and captions
-        self.raw_features = mx.symbol.Variable(name="features", shape=(self.batch_size, self.L, self.D), dtype="float32") # [batch_size, self.L, self.D]
-        self.captions = mx.symbol.Variable(name="captions", shape=(self.batch_size, self.T+1), dtype="float32") # [batch_size, self.T+1]
+        self.raw_features = mx.symbol.Variable(name="features", shape=(batch_size, self.L, self.D), dtype="float32") # [batch_size, self.L, self.D]
+        self.captions = mx.symbol.Variable(name="captions", shape=(batch_size, self.T+1), dtype="float32") # [batch_size, self.T+1]
         self.features_arr = mx.nd.ones([self.batch_size, self.L, self.D]).as_in_context(self.ctx)
-        self.captions_arr = mx.nd.ones([self.batch_size, self.T+1]).as_in_context(self.ctx)
+        self.captions_arr = mx.nd.ones([batch_size, self.T+1]).as_in_context(self.ctx)
 
         self.input_names=["features","captions"]
-        self.input_shapes = {"features":(self.batch_size, self.L, self.D), "captions":(self.batch_size, self.T+1)}
+        self.input_shapes = {"features":(batch_size, self.L, self.D), "captions":(batch_size, self.T+1)}
         self.input_types = {"features":"float32", "captions":"int32"}
         self.auxs={}
         self.arguments = {}
         self.initializers = {}
-        self.cnn_params = {}
-    def build_input_e2e(self):
-        # Place holder for features and captions
-        vgg19 = vggnet19(self.ctx, self.batch_size)
-        vgg19.load("model/vgg/vgg19",0)
-        self.raw_features, self.arguments, self.auxs = vgg19.getnet()
-        #self.raw_features [batch_size, self.L, self.D]
-        self.captions = mx.symbol.Variable(name="captions", shape=(self.batch_size, self.T+1), dtype="float32") # [batch_size, self.T+1]
-        self.image_arr = mx.nd.ones([self.batch_size, 3, 224, 224]).as_in_context(self.ctx)
-        self.captions_arr = mx.nd.ones([self.batch_size, self.T+1]).as_in_context(self.ctx)
-
-        self.input_names=["data","captions"]
-        self.input_shapes = {"data":(self.batch_size, 3, 224, 224)}#, "captions":(self.batch_size, self.T+1)}
-        self.input_types = {"data":"float32"}#, "captions":"int32"}
-        self.initializers = {}
-        self.cnn_params = [n for n in self.arguments if n not in self.input_names]
     def _get_initial_lstm(self, features):
-        #features_mean = mx.sym.mean(features, axis=1)
+        features_mean = mx.sym.mean(features, axis=1)
         #w_h = mx.sym.Variable(name='w_inith', shape=[self.batch_size, self.D], init=self.weight_initializer)
         #w_h = mx.sym.Variable(name='w_inith', shape=[self.D, self.H], init=self.weight_initializer)
         #b_h = mx.sym.Variable(name='b_inith', shape=[self.H], init=self.const_initializer)
-        inp = mx.sym.tanh( mx.sym.broadcast_plus(mx.sym.dot(features, self.w_feat2input), self.b_feat2input) )
+        h = mx.sym.tanh( mx.sym.broadcast_plus(mx.sym.dot(features_mean, self.w_feat2h), self.b_feat2h) )
 
         #w_c = mx.sym.Variable(name='w_initc', shape=[self.D, self.H], init=self.weight_initializer)
         #b_c = mx.sym.Variable(name='b_initc', shape=[self.H], init=self.const_initializer)
-        
-        #c = mx.sym.tanh( mx.sym.broadcast_plus(mx.sym.dot(features_mean, self.w_feat2c), self.b_feat2c) )
-        h = mx.sym.zeros([self.batch_size, self.H])
-        c = mx.sym.zeros([self.batch_size, self.H])
-        _, (h, c) = self.lstm_cell(inputs=inp, states=[h, c])
+        c = mx.sym.tanh( mx.sym.broadcast_plus(mx.sym.dot(features_mean, self.w_feat2c), self.b_feat2c) )
         return c, h
 
     def _word_embedding(self, inputs, w):
@@ -104,6 +83,13 @@ class CaptionGenerator(object):
             x.append(mx.sym.Embedding(data=inp, weight=w, input_dim=self.V, output_dim=self.M, name='word_vector'))  # (N, T, M) or (N, M)
         return x
 
+    def _project_features(self, features):
+        #w = mx.sym.Variable(name='w_featureproj', shape=[self.D, self.D], init=self.weight_initializer)
+        #features_flat = mx.sym.reshape(features, [-1, self.D])
+        #features_proj = features_flat*w
+        #features_proj = tf.reshape(features_proj, [-1, self.L, self.D])
+        #return features_proj
+        return mx.sym.dot(features, self.w_proj)
 
     def _attention_layer(self, features, features_proj, h, w, b, w_att):
 
@@ -131,10 +117,10 @@ class CaptionGenerator(object):
 
         if self.prev2out:
             h_logits += x
-        #h_logits = mx.sym.tanh(h_logits)
+        h_logits = mx.sym.tanh(h_logits)
 
-        #if dropout:
-        #    h_logits = mx.sym.Dropout(h_logits, p=0.5)
+        if dropout:
+            h_logits = mx.sym.Dropout(h_logits, p=0.5)
         out_logits = mx.sym.broadcast_plus(mx.sym.dot(h_logits, w_out), b_out)
         return out_logits
 
@@ -147,15 +133,25 @@ class CaptionGenerator(object):
         self.arguments['w_embed_weight'] = mx.nd.zeros([self.V, self.M], dtype='float32')
         self.initializers['w_embed_weight'] = self.emb_initializer
 
-        self.w_feat2input = mx.sym.Variable(name='w_initinput_weight', shape=[self.D*self.L, self.M], init=self.weight_initializer)
-        self.arguments['w_initinput_weight'] = mx.nd.zeros([self.D*self.L, self.M], dtype='float32')
-        self.initializers['w_initinput_weight'] = self.weight_initializer
+        self.att_w = mx.sym.Variable(name='w_att_weight', shape=[self.H, self.D], init=self.weight_initializer)
+        self.arguments['w_att_weight'] = mx.nd.zeros([self.H, self.D], dtype='float32')
+        self.initializers['w_att_weight'] = self.weight_initializer
 
-        self.b_feat2input = mx.sym.Variable(name='b_initinput_bias', shape=[self.M], init=self.const_initializer)
-        self.arguments['b_initinput_bias'] = mx.nd.zeros([self.M], dtype='float32')
-        self.initializers['b_initinput_bias'] = self.const_initializer
+        self.att_b = mx.sym.Variable(name = 'b_att_bias', shape=[self.D], init=self.const_initializer)
+        self.arguments['b_att_bias'] = mx.nd.zeros([self.D], dtype='float32')
+        self.initializers['b_att_bias'] = self.const_initializer
 
-        '''
+        self.att_w_att = mx.sym.Variable(name = 'w_att_att_weight', shape=[self.D, 1], init=self.weight_initializer)
+        self.arguments['w_att_att_weight'] = mx.nd.zeros([self.D, 1], dtype='float32')
+        self.initializers['w_att_att_weight'] = self.weight_initializer        
+
+        if self.selector:
+            self.sele_w = mx.sym.Variable(name = 'w_select_weight', shape=[self.H, 1], init=self.weight_initializer)
+            self.arguments['w_select_weight'] = mx.nd.zeros([self.H, 1], dtype='float32')
+            self.initializers['w_select_weight'] = self.weight_initializer
+            self.sele_b = mx.sym.Variable(name = 'b_select_bias', shape=[1], init=self.const_initializer)
+            self.arguments['b_select_bias'] = mx.nd.zeros([1], dtype='float32')
+            self.initializers['b_select_bias'] = self.const_initializer
         self.decode_w_h = mx.sym.Variable(name = 'w_h_decode_weight', shape=[self.H, self.M], init=self.weight_initializer)
         self.arguments['w_h_decode_weight'] = mx.nd.zeros([self.H, self.M], dtype='float32')
         self.initializers['w_h_decode_weight'] = self.weight_initializer
@@ -171,21 +167,37 @@ class CaptionGenerator(object):
         self.decode_b_out = mx.sym.Variable(name = 'b_out_decode_bias', shape=[self.V], init=self.const_initializer)
         self.arguments['b_out_decode_bias'] = mx.nd.zeros([self.V], dtype='float32')
         self.initializers['b_out_decode_bias'] = self.const_initializer
-        '''
-        self.decode_w = mx.sym.Variable(name = 'w_decode_weight', shape=[self.H, self.V], init=self.weight_initializer)
-        self.arguments['w_decode_weight'] = mx.nd.zeros([self.H, self.V], dtype='float32')
-        self.initializers['w_decode_weight'] = self.weight_initializer
-
-        self.decode_b = mx.sym.Variable(name = 'b_decode_bias', shape=[self.V], init=self.const_initializer)
-        self.arguments['b_decode_bias'] = mx.nd.zeros([self.V], dtype='float32')
-        self.initializers['b_decode_bias'] = self.const_initializer
 
         self.decode_w_ctx2out = None
-        
+        if self.ctx2out:
+            self.decode_w_ctx2out = mx.sym.Variable(name = 'w_ctx2out_weight', shape=[self.D, self.M], init=self.weight_initializer)
+            self.arguments['w_ctx2out_weight'] = mx.nd.zeros([self.D, self.M], dtype='float32')
+            self.initializers['w_ctx2out_weight'] = self.weight_initializer
+
+        self.w_proj = mx.sym.Variable(name='w_featureproj_weight', shape=[self.D, self.D], init=self.weight_initializer)
+        self.arguments['w_featureproj_weight'] = mx.nd.zeros([self.D, self.D], dtype='float32')
+        self.initializers['w_featureproj_weight'] = self.weight_initializer
+
+        self.w_feat2h = mx.sym.Variable(name='w_inith_weight', shape=[self.D, self.H], init=self.weight_initializer)
+        self.arguments['w_inith_weight'] = mx.nd.zeros([self.D, self.H], dtype='float32')
+        self.initializers['w_inith_weight'] = self.weight_initializer
+
+        self.b_feat2h = mx.sym.Variable(name='b_inith_bias', shape=[self.H], init=self.const_initializer)
+        self.arguments['b_inith_bias'] = mx.nd.zeros([self.H], dtype='float32')
+        self.initializers['b_inith_bias'] = self.const_initializer
+
+        self.w_feat2c = mx.sym.Variable(name='w_initc_weight', shape=[self.D, self.H], init=self.weight_initializer)
+        self.arguments['w_initc_weight'] = mx.nd.zeros([self.D, self.H], dtype='float32')
+        self.initializers['w_initc_weight'] = self.weight_initializer
+
+        self.b_feat2c = mx.sym.Variable(name='b_initc_bias', shape=[self.H], init=self.const_initializer)
+        self.arguments['b_initc_bias'] = mx.nd.zeros([self.H], dtype='float32')
+        self.initializers['b_initc_bias'] = self.const_initializer
+
         #self.lstmparam = mx.rnn.RNNParams(prefix='lstm_')
         self.lstm_cell = mx.rnn.LSTMCell(num_hidden=self.H)# params=self.lstmparam)
         
-        features = mx.sym.reshape(data=self.raw_features, shape=[self.batch_size, -1])
+        features = self.raw_features
         captions = mx.sym.split(self.captions, num_outputs=self.T+1, squeeze_axis=True)
 
         self.captions_in = [captions[x] for x in range(0,self.T)] #(self.T, batch_size)
@@ -197,15 +209,12 @@ class CaptionGenerator(object):
     
         self.init_state = self._get_initial_lstm(features=features)
         self.x = self._word_embedding(inputs=self.captions_in, w=self.embedding_w) #(self.T, batch_size, self.M)
-        #self.features_proj = self._project_features(features=features)
+        self.features_proj = self._project_features(features=features)
 
         for name in self.arguments.keys():
             desc = mx.init.InitDesc(name)
             w = self.arguments[name].as_in_context(self.ctx)
-            if name in self.initializers:
-                self.initializers[name](desc,w)
-            else:
-                print name,"has no initializer..."
+            self.initializers[name](desc,w)
             self.arguments[name] = w
     
     def getexe(self, sym, bp=True):
@@ -214,8 +223,8 @@ class CaptionGenerator(object):
         _param_names = [x for x in sym.list_arguments() if x not in self.input_names]
         _aux_names = sym.list_auxiliary_states()
 
-        arg_shapes, _, aux_shapes = sym.infer_shape(**self.input_shapes)
-        arg_types, _, aux_types = sym.infer_type(**self.input_types)
+        arg_shapes, _, aux_shapes = sym.infer_shape()#**self.input_shapes)
+        arg_types, _, aux_types = sym.infer_type()#**self.input_types)
         initer = self.weight_initializer
 
         arg_params = {}
@@ -243,16 +252,15 @@ class CaptionGenerator(object):
             if name in self.auxs.keys():
                 w = self.auxs[name]
             else:
-                print "aux:",name
-                #desc = mx.init.InitDesc(name)
-                w = mx.nd.zeros(aux_shapes[aux_name2idx[name]], dtype=aux_types[aux_name2idx[name]]).as_in_context(self.ctx)
-                #initer(desc,w)
+                print name
+                desc = mx.init.InitDesc(name)
+                w = mx.nd.zeros(aux_shapes[aux_name2idx[name]], dtype=aux_types[aux_name2idx[name]])
+                initer(desc,w)
                 self.auxs[name] = w
             aux_params[name] = w
 
         exec_params = arg_params
-        exec_params["data"] = self.image_arr
-        #exec_params["features"] = self.features_arr
+        exec_params["features"] = self.features_arr
         #exec_params['attrgt'] = mx.nd.ones([params.batch_size, 1000])
         exec_params["captions"] = self.captions_arr
 
@@ -268,22 +276,28 @@ class CaptionGenerator(object):
 
     def build_model(self):        
         loss = 0.0
-        #alpha_list = []
+        alpha_list = []
         c,h = self.init_state
         batch_size = self.batch_size
         for t in range(self.T):
-            #context, alpha = self._attention_layer(self.features, self.features_proj, h, self.att_w, self.att_b, self.att_w_att)
-            #alpha_list.append(alpha)
-            
-            #cc = mx.sym.concat(self.x[t], context, dim=1)
-            cc = self.x[t]
+            context, alpha = self._attention_layer(self.features, self.features_proj, h, self.att_w, self.att_b, self.att_w_att)
+            alpha_list.append(alpha)
+
+            if self.selector:
+                context, beta = self._selector(context, h, self.sele_w, self.sele_b)
+
+            cc = mx.sym.concat(self.x[t], context, dim=1)
             _, (h, c) = self.lstm_cell(inputs=cc, states=[h, c])
 
-            #logits = self._decode_lstm(self.x[t], h, context, self.decode_w_h, self.decode_b_h, self.decode_w_out, self.decode_b_out, self.decode_w_ctx2out, dropout=self.dropout)
-            logits = mx.sym.broadcast_plus(mx.sym.dot(h, self.decode_w), self.decode_b)
+            logits = self._decode_lstm(self.x[t], h, context, self.decode_w_h, self.decode_b_h, self.decode_w_out, self.decode_b_out, self.decode_w_ctx2out, dropout=self.dropout)
             logp = -mx.sym.log(mx.sym.softmax(logits))
             loss += mx.sym.sum( logp * mx.sym.one_hot(self.captions_out[t], depth=self.V) * mx.sym.broadcast_to(mx.sym.expand_dims(self.mask[t], axis=1), shape=(self.batch_size, self.V)))
 
+        if self.alpha_c > 0:
+            #alphas = mx.sym.pack(alpha_list)  # (T, N, L)
+            alphas_all = reduce(lambda x,y:x+y, alpha_list)  # (N, L)
+            alpha_reg = self.alpha_c * mx.sym.sum((16. / 196 - alphas_all) ** 2)
+            loss += alpha_reg
         loss = loss / batch_size
         loss = mx.sym.MakeLoss(loss)
         self.loss = loss
@@ -323,14 +337,14 @@ class CaptionGenerator(object):
             else:
                 print name,"off"
             self.arguments[name] = arg_params[name].copyto(self.ctx)
-        
+        '''
         for name in self.arguments.keys():
             if name in arg_params.keys():
-                continue
-                #print name,"have"
+                print name,"have"
             else:
                 print name,"not have"
-
+        print "Loading aux_params"
+        '''
         for name in aux_params.keys():
             if name in self.auxs.keys():
                 print name,"on"
@@ -342,8 +356,8 @@ class CaptionGenerator(object):
         c,h = self.init_state
         batch_size = self.batch_size
         sampled_word_list = []
-        #alpha_list = []
-        #beta_list = []
+        alpha_list = []
+        beta_list = []
 
         for t in range(max_len):
             if t == 0:
@@ -352,22 +366,20 @@ class CaptionGenerator(object):
             else:
                 #x = self._word_embedding(inputs=sampled_word, w=self.embedding_w)
                 x = mx.sym.Embedding(data=sampled_word, weight=self.embedding_w, input_dim=self.V, output_dim=self.M)
-            '''
+
             context, alpha = self._attention_layer(self.features, self.features_proj, h, self.att_w, self.att_b, self.att_w_att)
             alpha_list.append(alpha)
 
             if self.selector:
                 context, beta = self._selector(context, h, self.sele_w, self.sele_b)
                 beta_list.append(beta)
-            '''
-            #cc = mx.sym.concat(x, context, dim=1)
-            cc = x
+            
+            cc = mx.sym.concat(x, context, dim=1)
             _, (h, c) = self.lstm_cell(inputs=cc, states=[h, c])
 
             #_, (h, c) = self.lstm_cell(inputs=mx.sym.concat(x, context, dim=1), states=[h, c])
 
-            #logits = self._decode_lstm(x, h, context, self.decode_w_h, self.decode_b_h, self.decode_w_out, self.decode_b_out, self.decode_w_ctx2out)
-            logits = mx.sym.broadcast_plus(mx.sym.dot(h, self.decode_w), self.decode_b)
+            logits = self._decode_lstm(x, h, context, self.decode_w_h, self.decode_b_h, self.decode_w_out, self.decode_b_out, self.decode_w_ctx2out)
             sampled_word = mx.sym.argmax(logits, axis=1)
             sampled_word_list.append(sampled_word)
 
@@ -381,5 +393,4 @@ class CaptionGenerator(object):
         #sampled_captions.save("gen.json")
         self.captiongenerator = sampled_captions
         exe = self.getexe(sampled_captions, bp=False)
-        return _, _, sampled_captions, exe
-        #return alpha_list, beta_list, sampled_captions, exe
+        return alpha_list, beta_list, sampled_captions, exe
