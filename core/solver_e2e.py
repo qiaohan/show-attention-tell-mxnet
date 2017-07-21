@@ -81,7 +81,7 @@ class CaptioningSolver(object):
         n_iters_val = int(np.floor(self.val_data.totalnum) / self.batch_size)
         
         # build graphs for training model and sampling captions
-        self.model.build_variables()
+        self.model.build_input_e2e()
         #self.model.load("model/lstmwithoutcnn", ckptnum)
         loss, exe, input_names = self.model.build_model()
         _, _, generated_captions, gen_exe = self.model.build_sampler(max_len=20)
@@ -137,8 +137,8 @@ class CaptioningSolver(object):
                 for j,argn in enumerate(loss.list_arguments()):
                     if argn in input_names:
                         continue
-                    if argn in self.model.cnn_params:
-                        continue
+                    #if argn in self.model.cnn_params:
+                    #    continue
                     #print args[i], grads[i], states[i]
                     self.opt.update(j, args[j], grads[j], states[j])
                     #print "updated weights:",argn
@@ -184,5 +184,5 @@ class CaptioningSolver(object):
             '''
             # save model's parameters
             if (e + 1) % self.save_every == 0:
-                self.model.save("model/lstmwithoutcnn", ckptnum)
+                self.model.save("model/lstmwithcnn", ckptnum)
                 print "model-%s saved." % (e + 1)
